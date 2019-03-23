@@ -1,12 +1,14 @@
 #include "20171697.h"
 
+
+//******************Main Function************************//
 int main (void){
 	Init();
 	while(!Exit_flag){
 		switch(Get_Command()){
 			case HELP: help(); break;
 			case DiR: show_files(); break;
-			case QUIT: Exit_flag = TRUE; break;
+			case QUIT: quit(); break;
 			case HISTORY: show_history(); break;
 			case DUMP: mem_dump(); break;
 			case EDIT: mem_edit(); break;
@@ -27,12 +29,19 @@ int main (void){
 	end_program();
 }
 
+//********************Initialization****************************//
 void Init(){
 	Exit_flag = FALSE;
 	History_Head = NULL;
 	Memory = (unsigned char *)calloc(MEM_SIZE,sizeof(unsigned char));
+	if(Memory == NULL){
+		Exit_flag = TRUE;
+		printf("Error: fail to allocate memory\n");
+		return;
+	}
 	last_mem_idx = -1;
 
+	//Store Command//
 	command_list[0][0] = "h";
 	command_list[0][1] = "help";
 	command_list[1][0] = "d";
@@ -54,10 +63,12 @@ void Init(){
 	command_list[9][0] = "opcodelist";
 	command_list[9][1] = "\0";
 
+	//Make Hash Table//
 	Make_hash_table();
 }
 
-int Hash_func(char mnemonics[]){
+//***********************Relate to Hash Table*********************//
+int Hash_func(char mnemonics[]){//Return Hash value
 	int idx = 0;
 	int total = 0;
 	int ret;
@@ -72,96 +83,63 @@ int Hash_func(char mnemonics[]){
 	ret = (total % HASH_TABLE_SIZE);
 	return ret;
 }
-
-void Make_hash_table(){
+void Make_hash_table(){//Make Hash Table
 	char line[500];
 	char hex_str[3];
 	FILE *fp;
 	int i;
 	int store_adr;
+	char *ret;
 	unsigned int opc;
 	opcode_info *new_info;
 
+	//Initialize Hash Table
 	for(i = 0; i < HASH_TABLE_SIZE ; i++)
 		Hash_Table[i] = NULL;
 
+	//Open File
 	fp = fopen("opcode.txt","r");
 	if(fp == NULL){
-		printf("Error: cannot read opcode file\n");
+		printf("Error: cannot read opcode.txt file\n");
 		Exit_flag = TRUE;
 		return;
 	}
-	while(!feof(fp)){
-		fgets(line,500,fp);
+
+	while(1){
+		//Read one line of file
+		ret = fgets(line,500,fp);
+		if(ret == NULL)
+			break;
+
 		rd_pt = 0;
 		new_info = (opcode_info *)malloc(sizeof(opcode_info));
-		Handling_Input(0,line,hex_str,2);
-		Str_convert_into_Hex(hex_str, 2, &opc);
+		if(new_info == NULL){
+			printf("Error: fail to allocate memory\n");
+			Exit_flag = TRUE;
+			break;
+		}
+		//Read opcode
+		Handling_Input(0, line, hex_str, 2, TRUE);
+		Str_convert_into_Hex(hex_str, &opc);
+		//Store opcode
 		new_info->opcode = (unsigned char)opc;
-		Handling_Input(1,line,NULL,0);
-		Handling_Input(0,line,new_info->mnemonics,6);
+
+		//Ignore space in the file
+		Handling_Input(1, line, NULL, 0, FALSE);
+
+		//Read mnemonic
+		Handling_Input(0, line, new_info->mnemonics, 6, FALSE);
 		store_adr = Hash_func(new_info->mnemonics);
+		//Store mnemonic
 		new_info->next = Hash_Table[store_adr];
+
+		//Store in the Hash Table
 		Hash_Table[store_adr] = new_info;
 	}
 	fclose(fp);
 }
-int Handling_Input(int mode,char input_str[], char str[], int len){
-	/*mode=0: store until meeting blank
-	  mode=1: erase blanks
-	  return TRUE: meet '\n'
-	  return FALSE: not meet '\n'
-	  */
-	int idx = 0;
-	int ret;
-	int sig_exist = FALSE;
-	char ch;
-	while(1){
-		ch = input_str[rd_pt];
-		if(ch == '\n'){
-			ret = ENTER;
-			break;
-		}
-		else if(ch == ','){
-			ret = COMMA;
-			rd_pt++;
-			break;
-		}
-		if((ch == ' ' || ch == '\t' || ch == '\r' || ch == '\v') != mode){
-			if( mode == 0 )
-				ret = BLANK;
-			else
-				ret = CHAR;
-			break;
-		}
-		if(mode == 0){
-			if(idx >= len){
-				ret = FALSE;
-				break;
-			}
-			else if( str[0] == '0' ){
-				if((ch == '0') && (idx == 1))
-					idx = 1;
-				else if( ( ch == 'X' || ch == 'x') && (sig_exist == FALSE) ){
-					sig_exist = TRUE;
-					idx = 0;
-				}
-				else{
-					str[idx] = ch;
-					idx++;
-				}
-			}
-			else{
-				str[idx] = ch;
-				idx++;
-			}
-		}
-		rd_pt++;
-	}
-	if(mode == 0)
-		str[idx]='\0';
-	return ret;
-}
+
+//*********************Identify Command************************///
 int Get_Command(){
 	int idx = command_num;
 	int ret;
@@ -169,40 +147,60 @@ int Get_Command(){
 
 	Success = TRUE;
 	new_input = (input*)malloc(sizeof(input));
+	if(new_input == NULL){
+		printf("Error: fail to allocate memory\n");
+		Success = FALSE;
+		return idx;
+	}
 	new_input->next = NULL;
 
+	//Get Input
 	printf("sicsim> ");
 	fgets(new_input->str,MAX_COMMAND,stdin);
 	rd_pt = 0;
 
-	ret = Handling_Input(1,new_input->str,NULL,0); //erase blank before command
+	//Erase space before command//
+	ret = Handling_Input(1, new_input->str, NULL, 0, FALSE);
 	if(ret != CHAR){
 		Success = FALSE;
 		return idx;
 	}
-	ret =  Handling_Input(0,new_input->str,command,10);// store command
+	
+	//Store command
+	ret =  Handling_Input(0, new_input->str, command, 10, FALSE);
+
+	//Error
 	if( ret == COMMA || ret == FALSE){
 		Success = FALSE;
 		return idx;
 	}
+	else if( strcmp("\0",command) == 0 ){
+		Success = FALSE;
+		return idx;
+	}
 
+	//Find input command 
 	for(idx = 0 ; idx < command_num ; idx++){
 		if(!(strcmp(command_list[idx][0],command)&&strcmp(command_list[idx][1],command))){
 			return idx;
 		}
 	}
+	//Not Found
 	return idx;
 }
 
+//*********************'help' Command************************///
 void help(){
 	int idx;
 	int len;
 
-	if( Handling_Input(1,new_input->str,NULL,0) != ENTER ){
+	//There has to be no argument
+	if( Handling_Input(1, new_input->str, NULL, 0, FALSE) != ENTER ){
 		Success = FALSE;
 		return;
 	}
 
+	//Display command list
 	for( idx = 0 ; idx < command_num ; idx++ ){
 		printf("%s", command_list[idx][0]);
 		len = strlen(command_list[idx][0]);
@@ -229,6 +227,8 @@ void help(){
 		printf("\n");
 	}
 }
+
+//*********************'dir' Command************************///
 void show_files(){
 	DIR *current_dir; // directory stream
 	struct dirent *dr_st; //dirent structure
@@ -236,16 +236,19 @@ void show_files(){
 	int file_type;
 	int file_permission;
 
-	if( Handling_Input(1,new_input->str,NULL,0) != ENTER ){
+	//There has to be no argument
+	if( Handling_Input(1, new_input->str, NULL, 0, FALSE) != ENTER ){
 		Success = FALSE;
 		return;
 	}
 
+	//Open current directory
 	if ((current_dir = opendir(".")) == NULL){
 		printf("Error: cannot open current directory\n");
 		return;
 	}
 
+	//Look all files in the current directory
 	while(1){
 		if((dr_st = readdir(current_dir)) == NULL)
 			break;
@@ -255,38 +258,54 @@ void show_files(){
 		if(file_type == S_IFDIR){
 			printf("/");
 		}
-		else if((stat_st.st_mode & S_IXUSR) != 0){
+		else if((stat_st.st_mode & S_IXUSR) != 0){//user has permission to execute
 			printf("*");
 		}
-		else if((stat_st.st_mode & S_IXGRP) != 0){
+		else if((stat_st.st_mode & S_IXGRP) != 0){//group has permission to execute
 			printf("*");
 		}
-		else if((stat_st.st_mode & S_IXOTH) != 0){
+		else if((stat_st.st_mode & S_IXOTH) != 0){//other has permission to execute
 			printf("*");
 		}
 		printf("\n");
 	}
 	closedir(current_dir);
 }
+
+//*********************'quit' Command************************///
+void quit(){
+	//There has to be no argument
+	if( Handling_Input(1, new_input->str, NULL, 0, FALSE) != ENTER ){
+		Success = FALSE;
+		return;
+	}
+	Exit_flag = TRUE;
+	return;
+}
+
+//*********************'history' Command************************///
 void show_history(){
 	input *cur;
 	int num=1;
 
-	if( Handling_Input(1,new_input->str,NULL,0) != ENTER ){
+	//There has to be no argument
+	if( Handling_Input(1, new_input->str, NULL, 0, FALSE) != ENTER ){
 		Success = FALSE;
 		return;
 	}
 
+	//Print past commands from History_Head to History_Tail
 	cur = History_Head;
 	while(cur != NULL){
-		printf("%5d     %s",num,cur->str);
+		printf("%d	%s", num, cur->str);
 		cur = cur->next;
 		num++;
 	}
-	printf("%5d     %s",num,new_input->str);
+	printf("%d	%s", num, new_input->str);
 }
-int Str_convert_into_Hex(char str[], int len_limit, unsigned int *num){
-	int hex_len = 0;
+
+//*********************Manage Input String************************///
+int Str_convert_into_Hex(char str[], unsigned int *num){
 	int idx = 0;
 	int ret = TRUE;
 	unsigned int number = 0;
@@ -296,10 +315,6 @@ int Str_convert_into_Hex(char str[], int len_limit, unsigned int *num){
 	while(ret){
 		if(str[idx] == '\0')
 			break;
-		else if(hex_len >= len_limit){
-			ret = FALSE;
-			break;
-		}
 		else if( str[idx] >= '0' && str[idx] <= '9' ){
 			number *= 16;
 			number += (str[idx] - '0');
@@ -312,10 +327,11 @@ int Str_convert_into_Hex(char str[], int len_limit, unsigned int *num){
 			number *= 16;
 			number += (str[idx] - 'A' + 10);
 		}
-		else
+		else{
 			ret = FALSE;
+			break;
+		}
 		idx++;
-		hex_len++;
 	}
 	*num = number;
 	return ret;
@@ -336,17 +352,74 @@ void Hex_convert_into_Str(unsigned int num, int len){
 	}
 	printf("%s",str);
 }
+int Handling_Input(int mode, char input_str[], char str[], int len, int HEXA){
+	/*mode=0: store until meeting blank
+	  mode=1: erase blanks
+	  return TRUE: meet '\n'
+	  return FALSE: not meet '\n'
+	  */
+	int idx = 0;
+	int ret;
+	int sig_exist = FALSE;
+	int multi_zero = FALSE;
+	char ch;
+	while(1){
+		ch = input_str[rd_pt];
+		if(ch == '\n'){
+			ret = ENTER;
+			break;
+		}
+		else if(ch == ','){
+			ret = COMMA;
+			rd_pt++;
+			break;
+		}
+		if((ch == ' ' || ch == '\t' || ch == '\r' || ch == '\v') != mode){
+			if( mode == 0 )
+				ret = BLANK;
+			else
+				ret = CHAR;
+			break;
+		}
+		if(mode == 0){
+			if(idx >= len){
+				ret = FALSE;
+				break;
+			}
+			else if( HEXA && (idx == 1) && (str[0] == '0') ){
+				if(ch == '0'){
+					multi_zero = TRUE;
+				}
+				else if( (multi_zero == FALSE ) && ( ch == 'X' || ch == 'x') && (sig_exist == FALSE) ){
+					sig_exist = TRUE;
+					idx = 0;
+				}
+				else{
+					str[0] = ch;
+				}
+			}
+			else{
+				str[idx] = ch;
+				idx++;
+			}
+		}
+		rd_pt++;
+	}
+	if(mode == 0)
+		str[idx]='\0';
+	return ret;
+}
 int Get_argument(unsigned int *arg1, unsigned int *arg2, unsigned int *arg3, int arg_len[]){
 	int arg_num = 0;
 	int Max_arg_num = 3;
 	int i;
 	int ret;
 	int ret3, ret2, ret1;
-	char argument[3][8];
+	char argument[3][6];
 	ret3 = ret2 = ret1 = TRUE;
 
-	for( i = 0 ; i < Max_arg_num ; i++ ){
-		ret = Handling_Input(1,new_input->str,NULL,0);
+	for( i = 0 ; i < Max_arg_num ; i++ ){//get one argument for one loop
+		ret = Handling_Input(1, new_input->str, NULL, 0, FALSE);
 		if(ret == ENTER){
 			if(i != 0)
 				Success = FALSE;
@@ -356,16 +429,16 @@ int Get_argument(unsigned int *arg1, unsigned int *arg2, unsigned int *arg3, int
 			Success = FALSE;
 			return arg_num;
 		}
-		ret = Handling_Input(0,new_input->str,argument[i],arg_len[i]);
+		ret = Handling_Input(0, new_input->str, argument[i], arg_len[i], TRUE);
 		arg_num++;
 		if(ret == BLANK){
-			ret = Handling_Input(1,new_input->str,NULL,0);
+			ret = Handling_Input(1, new_input->str, NULL, 0, FALSE);
 		}
 		if(ret == ENTER){
 			switch(arg_num){
-				case 3: ret3  = Str_convert_into_Hex( argument[2], arg_len[2], arg3);
-				case 2: ret2  = Str_convert_into_Hex( argument[1], arg_len[1], arg2);
-				case 1: ret1 = Str_convert_into_Hex( argument[0], arg_len[0], arg1);
+				case 3: ret3  = Str_convert_into_Hex( argument[2], arg3);
+				case 2: ret2  = Str_convert_into_Hex( argument[1], arg2);
+				case 1: ret1 = Str_convert_into_Hex( argument[0], arg1);
 			}
 			Success = ( ret3 && ret2 && ret1 );
 			return arg_num;
@@ -379,8 +452,9 @@ int Get_argument(unsigned int *arg1, unsigned int *arg2, unsigned int *arg3, int
 		Success = FALSE;
 	return arg_num;
 }
+
+//*********************'dump' Command************************///
 void mem_dump(){
-	int ret;
 	unsigned int start_m;
 	unsigned int end_m;
 	unsigned int tmp;
@@ -394,12 +468,17 @@ void mem_dump(){
 	arg_len[0] = arg_len[1] = 5;
 	arg_len[2] = 2;
 
+	//Store argument and number of arguments
 	dump_case = Get_argument(&start_m, &end_m, &tmp, arg_len);
 	if( !Success )
 		return;
+	else if(dump_case == 3){
+		Success = FALSE;
+		return;
+	}
 
 	switch(dump_case){
-		case 0:{
+		case 0:{//# of arguments is zero.
 				   start_m = last_mem_idx + 1;
 				   if( start_m > MEM_LIMIT)
 					   start_m = 0;
@@ -410,7 +489,7 @@ void mem_dump(){
 				   end_p = 16 * (end_m/16);
 				   break;
 			   }
-		case 1:{
+		case 1:{//# of arguments is one.
 				   start_p = 16 * (start_m/16);
 				   end_m = 160 + start_m - 1;
 				   if( end_m > MEM_LIMIT )
@@ -419,7 +498,7 @@ void mem_dump(){
 				   break;
 
 			   }
-		case 2:{
+		case 2:{//# of argument is two.
 				   if( start_m > end_m ){
 					   Success = FALSE;
 					   return;
@@ -428,11 +507,11 @@ void mem_dump(){
 				   end_p = 16 * (end_m/16); 
 			   }
 	}
-
+	//print memory
 	for( idx = start_p ; idx <= end_p ; idx += 16){
-		Hex_convert_into_Str((unsigned int)idx,5);
+		Hex_convert_into_Str((unsigned int)idx,5);//print address
 		printf(" ");
-		for( r = idx ; r < (idx + 16) ; r++ ){
+		for( r = idx ; r < (idx + 16) ; r++ ){//print value of memory
 			if( (r > end_m) || (r < start_m) )  
 				printf("   ");
 			else{
@@ -441,6 +520,7 @@ void mem_dump(){
 			}
 		}
 		printf("; ");
+		//print ASCII code of memory
 		for( r = idx ; r < (idx + 16) ; r++ ){
 			if( (r > end_m) || (r < start_m) )  
 				printf(".");
@@ -451,9 +531,10 @@ void mem_dump(){
 		}
 		printf("\n");
 	}
-	last_mem_idx = end_m;
+	last_mem_idx = end_m;//store end memory
 }
 
+//*********************'edit' Command************************///
 void mem_edit(){
 	unsigned int address;
 	unsigned int value;
@@ -464,6 +545,7 @@ void mem_edit(){
 	arg_len[1] = 2;
 	arg_len[2] = 0;
 	
+	//Store arguments and the number of arguments
 	arg_num = Get_argument(&address, &value, &tmp, arg_len);
 	if( arg_num != 2)
 		Success = FALSE;
@@ -471,6 +553,7 @@ void mem_edit(){
 		Memory[address] = (unsigned char)value;
 }
 
+//*********************'fill' Command************************///
 void mem_fill(){
 	unsigned int start_m;
 	unsigned int end_m;
@@ -478,9 +561,10 @@ void mem_fill(){
 	int arg_num;
 	int idx;
 	int arg_len[3];
-	arg_len[0] = arg_len[1] = 7;
-	arg_len[2] = 4;
+	arg_len[0] = arg_len[1] = 5;
+	arg_len[2] = 2;
 
+	//Store arguments and the number of arguments
 	arg_num = Get_argument(&start_m, &end_m, &value, arg_len);
 	if( arg_num != 3)
 		Success = FALSE;
@@ -494,44 +578,54 @@ void mem_fill(){
 	}
 }
 
+//*********************'reset' Command************************///
 void mem_reset(){
 	int idx;
 	for( idx = 0; idx <= MEM_LIMIT ; idx++)
 		Memory[idx] = 0;
 }
+
+//*********************'opcode' Command************************///
 void opcode(){
 	int ret;
 	int adr;
 	opcode_info *cur;
 	char mnem[7];
 
-	ret = Handling_Input(1,new_input->str,NULL,0);
+	//Ignore space 
+	ret = Handling_Input(1, new_input->str, NULL, 0, FALSE);
+	//Error
 	if(ret != CHAR){
 		Success = FALSE;
 		return;
 	}
-	ret = Handling_Input(0,new_input->str, mnem,6);
-	if(ret == FALSE){
-		Success = FALSE;
-		return;
-	}
-	else if(ret == BLANK)
-		ret = Handling_Input(1,new_input->str,NULL,0);
+
+	//Store mnemonic
+	ret = Handling_Input(0, new_input->str, mnem, 6, FALSE);
+	//Error
+	if(ret == BLANK)
+		ret = Handling_Input(1,new_input->str, NULL, 0, FALSE);
 	if(ret != ENTER){
 		Success = FALSE;
 		return;
 	}
+
+	//Find Hash value
 	adr = Hash_func(mnem);
+	//Error
 	if( adr < 0 ){
 		Success = FALSE;
 		return;
 	}
+
+	//Find current mnemonic in the Hash Table
 	cur = Hash_Table[adr];
 	while(cur != NULL){
 		if( strcmp(cur->mnemonics, mnem) == 0)
 			break;
 		cur = cur->next;
 	}
+	//Not found
 	if( cur == NULL){
 		Success = FALSE;
 		return;
@@ -540,15 +634,17 @@ void opcode(){
 	Hex_convert_into_Str((unsigned int)cur->opcode,2);
 	printf(".\n");
 }
+
+//*********************'opcodelist' Command************************///
 void opcodelist(){
 	int ret;
 	int idx;
 	opcode_info *cur;
-	ret = Handling_Input(1,new_input->str,NULL,0);
+	ret = Handling_Input(1, new_input->str, NULL, 0, FALSE);
 	for( idx = 0 ; idx < HASH_TABLE_SIZE ; idx++){
 		printf("%d : ",idx);
 		cur = Hash_Table[idx];
-		while(1){
+		while(cur != NULL){
 			printf("[%s, ",cur->mnemonics);
 			Hex_convert_into_Str((unsigned int)cur->opcode,2);
 			printf("]");
@@ -562,16 +658,21 @@ void opcodelist(){
 	}
 }
 
+//*********************Store past Command************************///
 void store_input(){
+	//If empty Queue
 	if(History_Head == NULL){
 		History_Head = new_input;
 		History_Tail = History_Head;
 	}
+	//Push into the queue
 	else{
 		History_Tail->next = new_input;
 		History_Tail = new_input;
 	}
 }
+
+//*********************End Program - Free memory************************///
 void end_program(){
 	int idx;
 	opcode_info *prev;
@@ -587,7 +688,8 @@ void end_program(){
 		cur = NULL;
 	}
 
-	free(Memory);
+	if(Memory != NULL)
+		free(Memory);
 	Memory = NULL;
 
 	for( idx = 0 ; idx < HASH_TABLE_SIZE ; idx++ ){

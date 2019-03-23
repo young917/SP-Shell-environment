@@ -1,0 +1,34 @@
+System Programming Project1
+
+-----------------------------------------------------------------
+PURPOSE
+
+Implementation of shell environment that executes user commands,
+a memory space where object code will be loaded,
+and an opcode table which translates mnemonics to opcodes.
+-----------------------------------------------------------------
+FILES
+
+20171697.c
+20171697.h
+opcode.txt
+Makefile
+-----------------------------------------------------------------
+HOW TO RUN
+
+*
+To run this program,
+$ make
+$./20171697.out
+
+*
+To delete .out file
+$ make clean
+-----------------------------------------------------------------
+CREATED
+
+Mar 7 ~ Mar 25,2019
+-----------------------------------------------------------------
+AUTHOR
+
+20171697 Min Young, Choe
