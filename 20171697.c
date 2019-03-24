@@ -581,6 +581,13 @@ void mem_fill(){
 //*********************'reset' Command************************///
 void mem_reset(){
 	int idx;
+
+	//There has to be no argument
+	if( Handling_Input(1, new_input->str, NULL, 0, FALSE) != ENTER ){
+		Success = FALSE;
+		return;
+	}
+	//Make all memory zero
 	for( idx = 0; idx <= MEM_LIMIT ; idx++)
 		Memory[idx] = 0;
 }
@@ -640,7 +647,13 @@ void opcodelist(){
 	int ret;
 	int idx;
 	opcode_info *cur;
-	ret = Handling_Input(1, new_input->str, NULL, 0, FALSE);
+
+	//There has to be no argument
+	if( Handling_Input(1, new_input->str, NULL, 0, FALSE) != ENTER ){
+		Success = FALSE;
+		return;
+	}
+	//Print opcode table
 	for( idx = 0 ; idx < HASH_TABLE_SIZE ; idx++){
 		printf("%d : ",idx);
 		cur = Hash_Table[idx];
